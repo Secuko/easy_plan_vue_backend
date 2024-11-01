@@ -27,8 +27,7 @@ const userSchema = new mongoose.Schema({
     },
     desks: [
         {
-            deskId: String,
-            role: String
+            id: String,
         }
     ]
 });

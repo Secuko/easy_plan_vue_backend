@@ -71,7 +71,6 @@ app.post('/register', async (req, res) => {
     }
 });
 
-
 // Маршрут для авторизации
 app.post('/login', async (req, res) => {
     try {
@@ -94,7 +93,7 @@ app.post('/login', async (req, res) => {
             { expiresIn: '1h' } // Устанавливаем время жизни токена
         );
 
-        res.status(200).send({ token, message: 'Login successful' });
+        res.status(200).send({ token, message: 'Login successful', user});
     } catch (error) {
         res.status(500).send({ message: 'Error logging in', error });
     }
@@ -114,11 +113,73 @@ app.get('/protected-route', authMiddleware, (req, res) => {
 /*
 -----------------------------------------------------------------------------------------------------------------
 -----------------------------------------------------------------------------------------------------------------
-                                Методы для работы с доской
+                                Методы для получения, добавления досок и пользоватеелй друг другу
 -----------------------------------------------------------------------------------------------------------------
 -----------------------------------------------------------------------------------------------------------------
 */
 
+// Получение всех пользователей с ролью, отличной от "admin"
+app.get('/users/non-admins', async (req, res) => {
+    try {
+        // Находим пользователей, у которых роль не admin, и выбираем только id и email
+        const users = await User.find({ role: { $ne: 'admin' } }, 'id email');
+
+        res.status(200).send({ users });
+    } catch (error) {
+        res.status(500).send({ message: 'Error fetching users', error });
+    }
+});
+
+// Получение списка всех досок с полями id и name
+app.get('/desks', async (req, res) => {
+    try {
+        // Получаем список всех досок, выбирая только id и name
+        const desks = await Desk.find({}, 'id title');
+
+        res.status(200).send({ desks });
+    } catch (error) {
+        res.status(500).send({ message: 'Error fetching desks', error });
+    }
+});
+
+// Добавление пользователей на доску по её id
+app.post('/desk/:deskId/add-users', async (req, res) => {
+    try {
+        const { deskId } = req.params;
+        const { userIds} = req.body;
+
+        // Находим доску, к которой будут добавлены пользователи
+        const desk = await Desk.findOne({ id: deskId });
+        if (!desk) {
+            return res.status(404).send({ message: 'Desk not found' });
+        }
+
+
+        // Проходим по каждому userId и добавляем доску в список досок пользователя
+        await Promise.all(userIds.map(async (userId) => {
+            const user = await User.findOne({ id: userId });
+            if (user) {
+                // Проверка, чтобы избежать дублирования досок у пользователя
+                const userDeskExists = user.desks.some(desk => desk.id === deskId);
+                if (!userDeskExists) {
+                    user.desks.push({ id: deskId});
+                    await user.save();
+                }
+            }
+        }));
+
+        // Сохраняем доску с добавленными пользователями
+        desk.users = desk.users.concat(
+            userIds.filter(userId => !desk.users.includes(userId))
+        );
+
+        await desk.save();
+
+        res.status(200).send({ message: 'Users added to desk successfully'});
+    } catch (error) {
+        res.status(500).send({ message: 'Error adding users to desk', error });
+    }
+});
 
 
 /*
